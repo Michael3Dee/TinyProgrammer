@@ -548,15 +548,15 @@ class LLMGenerator:
         )
         return prompt
 
-    def build_reflection_prompt(self, result: str) -> str:
+    def build_reflection_prompt(self, code: str, program_type: str, result: str) -> str:
         """Build a prompt to learn from code execution."""
-        # Get canvas dimensions from config
         canvas_w = config.CANVAS_DRAW_W
         canvas_h = config.CANVAS_DRAW_H
 
         prompt = (
-            "Review this Python code execution:\n"
-            f"Result: {result}\n\n"
+            f"You wrote this Python program (a {program_type}):\n\n"
+            f"{code}\n\n"
+            f"Execution result: {result}\n\n"
             "What is ONE technical lesson to remember for next time?\n"
             "Focus on syntax, libraries, or logic errors.\n"
             "Examples:\n"
