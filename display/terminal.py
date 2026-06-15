@@ -28,6 +28,12 @@ import config
 from .framebuffer import get_writer, IS_FRAMEBUFFER_AVAILABLE
 from .chrome import default_chrome_regions
 
+# TinyProgrammer never uses audio; suppress SDL/ALSA so pygame.init() does not
+# start the mixer and flood stderr with "snd_pcm_recover underrun occurred" on
+# headless Pis with no sound card. Honors an explicit override if the user sets
+# SDL_AUDIODRIVER themselves (e.g., for a custom build).
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
 # Initialize pygame with dummy driver
 PYGAME_AVAILABLE = True
 try:
