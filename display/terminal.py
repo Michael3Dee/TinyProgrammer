@@ -191,6 +191,17 @@ class Terminal:
         else:
             self.font_bold = self.font
 
+        # Smaller font for the BBS ASCII banner so the 6-line logo does not
+        # eat half of the readable terminal area on small displays (#67).
+        banner_size = max(8, int(font_size * 0.65))
+        if os.path.exists(font_path):
+            self.bbs_banner_font = pygame.font.Font(font_path, banner_size)
+        else:
+            self.bbs_banner_font = pygame.font.Font(None, banner_size)
+        self.bbs_banner_char_height = self.bbs_banner_font.get_linesize()
+        # Monospace, so any character's width is the cell width.
+        self.bbs_banner_char_width = self.bbs_banner_font.size("M")[0]
+
     def _init_chrome_backend(self):
         normalize_backend = getattr(config, "normalize_display_chrome_backend", None)
         requested_backend = getattr(config, "DISPLAY_CHROME_BACKEND", "asset")
@@ -866,17 +877,18 @@ class Terminal:
         colors = self._bbs_colors()
         y = self._bbs_y + 4
         for line in self.BBS_BANNER:
-            surf = self.font.render(line, True, colors["accent"])
+            surf = self.bbs_banner_font.render(line, True, colors["accent"])
             self.screen.blit(surf, (self._bbs_x + 8, y))
-            y += self.char_height
+            y += self.bbs_banner_char_height
 
-        # Notification text (orange) on the same line as version
+        # Notification text (orange) on the same line as version. Rendered in
+        # the same smaller banner font so it shares a baseline with "v0.3.5".
         notif = getattr(self, "_bbs_notification", None)
         if notif:
-            last_line_y = y - self.char_height
-            last_surf = self.font.render(self.BBS_BANNER[-1], True, colors["accent"])
-            notif_x = self._bbs_x + 8 + last_surf.get_width() + self.char_width * 2
-            notif_surf = self.font.render(notif, True, (255, 165, 0))
+            last_line_y = y - self.bbs_banner_char_height
+            last_surf = self.bbs_banner_font.render(self.BBS_BANNER[-1], True, colors["accent"])
+            notif_x = self._bbs_x + 8 + last_surf.get_width() + self.bbs_banner_char_width * 2
+            notif_surf = self.bbs_banner_font.render(notif, True, (255, 165, 0))
             self.screen.blit(notif_surf, (notif_x, last_line_y))
 
     def _bbs_set_notification(self, text):
@@ -888,8 +900,8 @@ class Terminal:
         if self.mock_mode:
             return
         colors = self._bbs_colors()
-        # Banner takes ~6 lines + padding
-        content_y = self._bbs_y + (len(self.BBS_BANNER) * self.char_height) + 12
+        # Banner takes ~6 lines + padding, sized by the smaller banner font.
+        content_y = self._bbs_y + (len(self.BBS_BANNER) * self.bbs_banner_char_height) + 12
         content_h = self._bbs_max_y - content_y
         rect = pygame.Rect(self._bbs_x, content_y, self._BBS_DRAW_W, content_h)
         pygame.draw.rect(self.screen, colors["bg"], rect)
