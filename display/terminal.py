@@ -870,25 +870,62 @@ class Terminal:
         self._render_bbs_banner()
         self._flip(force=True)
 
+    def _bbs_banner_metrics(self):
+        """Return (font, line_height, char_width) for the active banner size."""
+        if getattr(self, "_bbs_banner_compact", False):
+            return (
+                self.bbs_banner_font,
+                self.bbs_banner_char_height,
+                self.bbs_banner_char_width,
+            )
+        return self.font, self.char_height, self.char_width
+
+    def _bbs_banner_footprint(self) -> int:
+        """Vertical space the current banner occupies (in pixels)."""
+        _, line_h, _ = self._bbs_banner_metrics()
+        return len(self.BBS_BANNER) * line_h
+
+    def _bbs_use_banner(self, compact: bool) -> None:
+        """Switch the banner size and redraw it if the mode changed.
+
+        The BBS home/menu keeps the full-size banner for splash impact;
+        inner pages (feed, thread, compose) use the compact banner so the
+        content area gets more vertical room (#67).
+        """
+        if getattr(self, "_bbs_banner_compact", False) == compact:
+            return
+        self._bbs_banner_compact = compact
+        self._render_bbs_banner()
+
     def _render_bbs_banner(self):
         """Draw the ASCII art header inside the terminal draw area."""
         if self.mock_mode:
             return
         colors = self._bbs_colors()
+        font, line_h, char_w = self._bbs_banner_metrics()
+
+        # Clear the LARGEST possible banner footprint so a previously-drawn
+        # large banner does not leave artifacts behind a smaller one.
+        max_footprint = len(self.BBS_BANNER) * self.char_height + 8
+        clear_rect = pygame.Rect(
+            self._bbs_x, self._bbs_y, self._BBS_DRAW_W, max_footprint
+        )
+        pygame.draw.rect(self.screen, colors["bg"], clear_rect)
+
         y = self._bbs_y + 4
         for line in self.BBS_BANNER:
-            surf = self.bbs_banner_font.render(line, True, colors["accent"])
+            surf = font.render(line, True, colors["accent"])
             self.screen.blit(surf, (self._bbs_x + 8, y))
-            y += self.bbs_banner_char_height
+            y += line_h
 
         # Notification text (orange) on the same line as version. Rendered in
-        # the same smaller banner font so it shares a baseline with "v0.3.5".
+        # the same font so it shares a baseline with "v0.3.5".
         notif = getattr(self, "_bbs_notification", None)
         if notif:
-            last_line_y = y - self.bbs_banner_char_height
-            last_surf = self.bbs_banner_font.render(self.BBS_BANNER[-1], True, colors["accent"])
-            notif_x = self._bbs_x + 8 + last_surf.get_width() + self.bbs_banner_char_width * 2
-            notif_surf = self.bbs_banner_font.render(notif, True, (255, 165, 0))
+            last_line_y = y - line_h
+            last_surf = font.render(self.BBS_BANNER[-1], True, colors["accent"])
+            notif_x = self._bbs_x + 8 + last_surf.get_width() + char_w * 2
+            notif_surf = font.render(notif, True, (255, 165, 0))
             self.screen.blit(notif_surf, (notif_x, last_line_y))
 
     def _bbs_set_notification(self, text):
@@ -900,8 +937,8 @@ class Terminal:
         if self.mock_mode:
             return
         colors = self._bbs_colors()
-        # Banner takes ~6 lines + padding, sized by the smaller banner font.
-        content_y = self._bbs_y + (len(self.BBS_BANNER) * self.bbs_banner_char_height) + 12
+        # Banner footprint matches the currently-active banner mode.
+        content_y = self._bbs_y + self._bbs_banner_footprint() + 12
         content_h = self._bbs_max_y - content_y
         rect = pygame.Rect(self._bbs_x, content_y, self._BBS_DRAW_W, content_h)
         pygame.draw.rect(self.screen, colors["bg"], rect)
@@ -1023,6 +1060,7 @@ class Terminal:
         if self.mock_mode:
             return
         colors = self._bbs_colors()
+        self._bbs_use_banner(compact=False)
         self._bbs_clear_content()
 
         lines = []
@@ -1049,6 +1087,7 @@ class Terminal:
         """Render a flat board feed with auto-scrolling."""
         if self.mock_mode:
             return
+        self._bbs_use_banner(compact=True)
         self._bbs_clear_content()
 
         board_titles = {
@@ -1072,6 +1111,7 @@ class Terminal:
         """Render Code Share thread listing."""
         if self.mock_mode:
             return
+        self._bbs_use_banner(compact=True)
         self._bbs_clear_content()
 
         lines = []
@@ -1086,6 +1126,7 @@ class Terminal:
         """Render a thread's top post and replies with auto-scrolling."""
         if self.mock_mode:
             return
+        self._bbs_use_banner(compact=True)
         self._bbs_clear_content()
 
         post = detail.get("post", {})
@@ -1118,6 +1159,7 @@ class Terminal:
         self._bbs_compose_label = context
         self._bbs_compose_text = ""
         colors = self._bbs_colors()
+        self._bbs_use_banner(compact=True)
         self._bbs_redraw_compose(colors, header_only=True)
         self._flip(force=True)
 
