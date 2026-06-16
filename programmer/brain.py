@@ -64,6 +64,23 @@ class Program:
     canvas_protocol: str = CANVAS_PROTOCOL_LEGACY
 
 
+def _clean_generated_code(raw: str) -> str:
+    """Strip markdown fences and bare ``python`` language tags from generated code.
+
+    The runtime cleans before review/run; archiving without this step persists
+    unparseable source even on successful runs (issue #43). Centralizing the
+    cleaning here keeps review, run, and archive in sync.
+    """
+    lines = (raw or "").split("\n")
+    cleaned: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped == "python":
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
 def _typing_delay_range() -> tuple[float, float]:
     """Return per-character delay bounds from live chars/sec config."""
     min_cps = float(getattr(config, "TYPING_SPEED_MIN", 2) or 2)
@@ -591,16 +608,10 @@ class Brain:
         self.terminal.type_string("\n# checking my work...\n")
         time.sleep(1)
         
-        # Clean the code (same as in _do_run)
-        raw_code = self.current_program.code
-        lines = raw_code.split('\n')
-        clean_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('```') or stripped == 'python':
-                continue
-            clean_lines.append(line)
-        code = '\n'.join(clean_lines).strip()
+        # Clean once and write back so review, run, and archive all see the
+        # same parseable Python (issue #43).
+        code = _clean_generated_code(self.current_program.code)
+        self.current_program.code = code
         
         # 1. Check for banned imports
         banned = ["pygame", "turtle", "tkinter", "matplotlib"]
@@ -646,18 +657,10 @@ class Brain:
         self.terminal.set_status("RUNNING")
         self.terminal.show_canvas()
 
-        # Clean the code
+        # Code was already cleaned in _do_review and written back to
+        # current_program.code, so archive, review, and run stay in sync.
         code = self.current_program.code
-        # Strip markdown and language identifiers
-        lines = code.split('\n')
-        clean_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('```') or stripped == 'python':
-                continue
-            clean_lines.append(line)
-        code = '\n'.join(clean_lines).strip()
-        
+
         # Save cleaned code to temp file for execution
         filename = "temp_execution.py"
         programs_dir = self.archive.local_path
