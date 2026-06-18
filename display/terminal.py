@@ -670,6 +670,24 @@ class Terminal:
             pygame.draw.circle(
                 target, tuple(args[3:]),
                 (args[0], args[1]), args[2])
+        elif c == "TRIANGLE":
+            pygame.draw.polygon(
+                target, tuple(args[6:]),
+                [(args[0], args[1]), (args[2], args[3]), (args[4], args[5])], 1)
+        elif c == "FILLTRIANGLE":
+            pygame.draw.polygon(
+                target, tuple(args[6:]),
+                [(args[0], args[1]), (args[2], args[3]), (args[4], args[5])])
+        elif c == "QUAD":
+            pygame.draw.polygon(
+                target, tuple(args[8:]),
+                [(args[0], args[1]), (args[2], args[3]),
+                 (args[4], args[5]), (args[6], args[7])], 1)
+        elif c == "FILLQUAD":
+            pygame.draw.polygon(
+                target, tuple(args[8:]),
+                [(args[0], args[1]), (args[2], args[3]),
+                 (args[4], args[5]), (args[6], args[7])])
         self._dirty = True  # Will be composited on next _render()
 
     # =========================================================================
