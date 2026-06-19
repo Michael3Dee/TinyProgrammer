@@ -438,34 +438,41 @@ class Brain:
             self._current_variation = liked
             self._current_mode = "variation"
             print(f"[Brain] Variation: remixing liked {program_type}")
-        elif roll < variation_prob + core_prob:
+        else:
             # Core mode: pick from core list (built-ins + user-opted customs),
             # filtered to currently-enabled types. No creative dimensions.
-            core_programs = list(getattr(config, "CORE_PROGRAMS", []))
-            customs = getattr(config, "CUSTOM_PROGRAM_TYPES", None) or {}
-            for slug, meta in customs.items():
-                if meta.get("core") and slug not in core_programs:
-                    core_programs.append(slug)
-            enabled = {t for t, _ in getattr(config, "PROGRAM_TYPES", [])}
-            if enabled:
-                core_programs = [p for p in core_programs if p in enabled] or core_programs
-            last = getattr(self, "_last_program_type", None)
-            choices = [p for p in core_programs if p != last] or core_programs
-            program_type = random.choice(choices)
-            self._last_program_type = program_type
-            self._current_creative = None
-            self._current_variation = None
-            self._current_mode = "core"
-            print(f"[Brain] Core: {program_type}")
-        else:
-            # Creative mode: full creativity system
-            creative = creativity.pick_creative_dimensions(mood)
-            self._current_creative = creative
-            self._current_variation = None
-            self._current_mode = "creative"
-            program_type = self._choose_program_type(mood)
-            seed_str = creative.get("inspiration_seed") or "none"
-            print(f"[Brain] Creative: style={creative['style']}, palette={creative['palette']}, seed={seed_str}")
+            core_programs = []
+            if roll < variation_prob + core_prob:
+                core_programs = list(getattr(config, "CORE_PROGRAMS", []))
+                customs = getattr(config, "CUSTOM_PROGRAM_TYPES", None) or {}
+                for slug, meta in customs.items():
+                    if meta.get("core") and slug not in core_programs:
+                        core_programs.append(slug)
+                enabled = {t for t, _ in getattr(config, "PROGRAM_TYPES", [])}
+                if enabled:
+                    # Drop disabled types. If the user disabled every core type
+                    # the pool is empty — fall through to creative mode below
+                    # rather than silently resurrecting the full list.
+                    core_programs = [p for p in core_programs if p in enabled]
+
+            if core_programs:
+                last = getattr(self, "_last_program_type", None)
+                choices = [p for p in core_programs if p != last] or core_programs
+                program_type = random.choice(choices)
+                self._last_program_type = program_type
+                self._current_creative = None
+                self._current_variation = None
+                self._current_mode = "core"
+                print(f"[Brain] Core: {program_type}")
+            else:
+                # Creative mode: full creativity system
+                creative = creativity.pick_creative_dimensions(mood)
+                self._current_creative = creative
+                self._current_variation = None
+                self._current_mode = "creative"
+                program_type = self._choose_program_type(mood)
+                seed_str = creative.get("inspiration_seed") or "none"
+                print(f"[Brain] Creative: style={creative['style']}, palette={creative['palette']}, seed={seed_str}")
 
         # Thinking comments
         comment = self.personality.get_thinking_comment()
