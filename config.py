@@ -28,7 +28,7 @@ def _env_int(name, default):
 
 
 # Tiny Programmer Configuration
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 
 # =============================================================================
 # DISPLAY — auto-scaled from 480x320 reference layout

@@ -632,7 +632,14 @@ class Brain:
                     self._transition(State.FIX)
                     return
                 else:
-                    self.terminal.type_string("# ignoring it...\n")
+                    # Never run banned libraries: pygame/turtle/tkinter open
+                    # their own window and hijack the display. Give up like the
+                    # syntax-error path below instead of executing it.
+                    self.terminal.type_string("# still using it, giving up.\n")
+                    self.current_program.error_message = msg
+                    self.current_program.success = False
+                    self._transition(State.ARCHIVE)
+                    return
 
         # 2. Check syntax
         try:
