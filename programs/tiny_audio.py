@@ -24,6 +24,11 @@ looking original when no music plays. Never compute 1 - audio.low
 yourself: that would turn the 1.0 fallback into 0 and break programs
 on the Pi.
 
+audio.flip alternates with the beat: +1 on even beats, -1 on odd beats
+(audio.iflip is the opposite phase). Handy as a direction or mirror
+factor, e.g. x = cx + int(dx * audio.flip). Without an analyzer and
+during silence both are +1, so programs keep their original look.
+
 audio.active is the liveness factor itself (0 = no music/no analyzer,
 1 = live audio) - useful for switching, but multiplying colors by it
 will darken programs when no music plays, so prefer the values above.
@@ -41,7 +46,7 @@ import struct
 import tempfile
 import time
 
-_FMT = "<d6f"     # timestamp, active, level, low, mid, high, beat (roh)
+_FMT = "<d7f"  # timestamp, active, level, low, mid, high, beat, flip (roh)
 _SIZE = struct.calcsize(_FMT)
 _STALE_SECONDS = 0.5
 _CACHE_SECONDS = 0.02             # at most ~50 reads per second
@@ -60,6 +65,8 @@ class _Audio:
         self._fh = None
         self._vals = (1.0, 1.0, 1.0, 1.0, 1.0)
         self._ivals = (1.0, 1.0, 1.0, 1.0, 1.0)
+        self._flip = 1.0
+        self._iflip = 1.0
         self._active = 0.0
         self._read_at = 0.0
         self._reopen_at = -_REOPEN_SECONDS
@@ -115,14 +122,19 @@ class _Audio:
             blend = max(0.0, min(1.0, rec[1]))
             raw = tuple(0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
                         for v in rec[2:7])
+            flip = max(-1.0, min(1.0, rec[7]))
             self._active = blend
             self._vals = tuple(v * blend + (1.0 - blend) for v in raw)
             self._ivals = tuple((1.0 - v) * blend + (1.0 - blend)
                                 for v in raw)
+            self._flip = flip * blend + (1.0 - blend)
+            self._iflip = -flip * blend + (1.0 - blend)
         else:
             self._active = 0.0
             self._vals = (1.0, 1.0, 1.0, 1.0, 1.0)
             self._ivals = (1.0, 1.0, 1.0, 1.0, 1.0)
+            self._flip = 1.0
+            self._iflip = 1.0
 
     @property
     def level(self):
@@ -175,6 +187,16 @@ class _Audio:
     def ibeat(self):
         self._refresh()
         return self._ivals[4]
+
+    @property
+    def flip(self):
+        self._refresh()
+        return self._flip
+
+    @property
+    def iflip(self):
+        self._refresh()
+        return self._iflip
 
     @property
     def active(self):
