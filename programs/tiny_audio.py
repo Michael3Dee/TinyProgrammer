@@ -16,6 +16,18 @@ All values are in 0..1:
     audio.high    treble band energy
     audio.beat    jumps to 1.0 on a detected beat, then decays to 0
 
+Inverted counterparts (prefix i): audio.ilevel, ilow, imid, ihigh,
+ibeat. With live audio they are 1 - value (ibeat: 0 on a beat, back to
+1 as it decays) - but without an analyzer AND during silence they are
+1.0 just like the normal values, so any mix of both keeps programs
+looking original when no music plays. Never compute 1 - audio.low
+yourself: that would turn the 1.0 fallback into 0 and break programs
+on the Pi.
+
+audio.active is the liveness factor itself (0 = no music/no analyzer,
+1 = live audio) - useful for switching, but multiplying colors by it
+will darken programs when no music plays, so prefer the values above.
+
 Example:
     c.fill_circle(x, y, r, int(255 * audio.low), 0, int(255 * audio.high))
 
@@ -29,7 +41,7 @@ import struct
 import tempfile
 import time
 
-_FMT = "<d5f"                     # timestamp, level, low, mid, high, beat
+_FMT = "<d6f"     # timestamp, active, level, low, mid, high, beat (roh)
 _SIZE = struct.calcsize(_FMT)
 _STALE_SECONDS = 0.5
 _CACHE_SECONDS = 0.02             # at most ~50 reads per second
@@ -47,6 +59,8 @@ class _Audio:
             tempfile.gettempdir(), "tiny_audio.shm")
         self._fh = None
         self._vals = (1.0, 1.0, 1.0, 1.0, 1.0)
+        self._ivals = (1.0, 1.0, 1.0, 1.0, 1.0)
+        self._active = 0.0
         self._read_at = 0.0
         self._reopen_at = -_REOPEN_SECONDS
 
@@ -95,11 +109,20 @@ class _Audio:
                 self._fh = None
             rec = self._read_record()
         if self._is_fresh(rec):
-            self._vals = tuple(
-                0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
-                for v in rec[1:6])
+            # Der Analyzer liefert Rohwerte plus den Liveness-Faktor
+            # (blend); normale und invertierte Werte blenden beide bei
+            # Stille auf 1.0 - so bleibt jede Mischung im Original-Look.
+            blend = max(0.0, min(1.0, rec[1]))
+            raw = tuple(0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+                        for v in rec[2:7])
+            self._active = blend
+            self._vals = tuple(v * blend + (1.0 - blend) for v in raw)
+            self._ivals = tuple((1.0 - v) * blend + (1.0 - blend)
+                                for v in raw)
         else:
+            self._active = 0.0
             self._vals = (1.0, 1.0, 1.0, 1.0, 1.0)
+            self._ivals = (1.0, 1.0, 1.0, 1.0, 1.0)
 
     @property
     def level(self):
@@ -125,6 +148,38 @@ class _Audio:
     def beat(self):
         self._refresh()
         return self._vals[4]
+
+    # -- invertierte Werte (1 - x bei Live-Audio, 1.0 im Fallback) ----------
+
+    @property
+    def ilevel(self):
+        self._refresh()
+        return self._ivals[0]
+
+    @property
+    def ilow(self):
+        self._refresh()
+        return self._ivals[1]
+
+    @property
+    def imid(self):
+        self._refresh()
+        return self._ivals[2]
+
+    @property
+    def ihigh(self):
+        self._refresh()
+        return self._ivals[3]
+
+    @property
+    def ibeat(self):
+        self._refresh()
+        return self._ivals[4]
+
+    @property
+    def active(self):
+        self._refresh()
+        return self._active
 
 
 audio = _Audio()
