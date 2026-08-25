@@ -33,10 +33,18 @@ values, so any mix of both keeps programs looking original when no
 music plays. Never compute 1 - audio.low yourself: that would turn the
 1.0 fallback into 0 and break programs on the Pi.
 
+audio.ramp is the beat phase: 0.0 right after a beat, rising to 1.0
+when the next one is due (audio.iramp runs the other way). Great for
+rotations or sweeps locked to the tempo. Without a tempo lock, an
+analyzer or during silence it is constant 1.0.
+
 audio.flip alternates with the beat: +1 on even beats, -1 on odd beats
 (audio.iflip is the opposite phase). Handy as a direction or mirror
-factor, e.g. x = cx + int(dx * audio.flip). Without an analyzer and
-during silence both are +1, so programs keep their original look.
+factor, e.g. x = cx + int(dx * audio.flip). The divided variants
+audio.flip05 / flip2 / flip4 / flip8 alternate on the corresponding
+divided beats (flip8: side change every 8 beats), each with an
+inverted i-counterpart. Without an analyzer and during silence all
+flips are +1, so programs keep their original look.
 
 audio.active is the liveness factor itself (0 = no music/no analyzer,
 1 = live audio) - useful for switching, but multiplying colors by it
@@ -56,9 +64,10 @@ import tempfile
 import time
 
 # timestamp, active, level, low, mid, high, beat, beat05, beat2, beat4,
-# beat8, flip (Rohwerte)
-_FMT = "<d11f"
-_NVALS = 9        # level, low, mid, high, beat, beat05, beat2, beat4, beat8
+# beat8, ramp, flip, flip05, flip2, flip4, flip8 (Rohwerte)
+_FMT = "<d16f"
+_NVALS = 10       # level..beat8 plus ramp (alle 0..1)
+_NFLIPS = 5       # flip, flip05, flip2, flip4, flip8 (alle -1..+1)
 _SIZE = struct.calcsize(_FMT)
 _STALE_SECONDS = 0.5
 _CACHE_SECONDS = 0.02             # at most ~50 reads per second
@@ -77,8 +86,8 @@ class _Audio:
         self._fh = None
         self._vals = (1.0,) * _NVALS
         self._ivals = (1.0,) * _NVALS
-        self._flip = 1.0
-        self._iflip = 1.0
+        self._flips = (1.0,) * _NFLIPS
+        self._iflips = (1.0,) * _NFLIPS
         self._active = 0.0
         self._read_at = 0.0
         self._reopen_at = -_REOPEN_SECONDS
@@ -134,19 +143,20 @@ class _Audio:
             blend = max(0.0, min(1.0, rec[1]))
             raw = tuple(0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
                         for v in rec[2:2 + _NVALS])
-            flip = max(-1.0, min(1.0, rec[2 + _NVALS]))
+            flips = tuple(max(-1.0, min(1.0, v))
+                          for v in rec[2 + _NVALS:2 + _NVALS + _NFLIPS])
             self._active = blend
             self._vals = tuple(v * blend + (1.0 - blend) for v in raw)
             self._ivals = tuple((1.0 - v) * blend + (1.0 - blend)
                                 for v in raw)
-            self._flip = flip * blend + (1.0 - blend)
-            self._iflip = -flip * blend + (1.0 - blend)
+            self._flips = tuple(f * blend + (1.0 - blend) for f in flips)
+            self._iflips = tuple(-f * blend + (1.0 - blend) for f in flips)
         else:
             self._active = 0.0
             self._vals = (1.0,) * _NVALS
             self._ivals = (1.0,) * _NVALS
-            self._flip = 1.0
-            self._iflip = 1.0
+            self._flips = (1.0,) * _NFLIPS
+            self._iflips = (1.0,) * _NFLIPS
 
     @property
     def level(self):
@@ -241,14 +251,66 @@ class _Audio:
         return self._ivals[8]
 
     @property
+    def ramp(self):
+        self._refresh()
+        return self._vals[9]
+
+    @property
+    def iramp(self):
+        self._refresh()
+        return self._ivals[9]
+
+    # -- Paritaets-Flips (+1/-1 im Wechsel; 1.0 im Fallback) ----------------
+
+    @property
     def flip(self):
         self._refresh()
-        return self._flip
+        return self._flips[0]
+
+    @property
+    def flip05(self):
+        self._refresh()
+        return self._flips[1]
+
+    @property
+    def flip2(self):
+        self._refresh()
+        return self._flips[2]
+
+    @property
+    def flip4(self):
+        self._refresh()
+        return self._flips[3]
+
+    @property
+    def flip8(self):
+        self._refresh()
+        return self._flips[4]
 
     @property
     def iflip(self):
         self._refresh()
-        return self._iflip
+        return self._iflips[0]
+
+    @property
+    def iflip05(self):
+        self._refresh()
+        return self._iflips[1]
+
+    @property
+    def iflip2(self):
+        self._refresh()
+        return self._iflips[2]
+
+    @property
+    def iflip4(self):
+        self._refresh()
+        return self._iflips[3]
+
+    @property
+    def iflip8(self):
+        self._refresh()
+        return self._iflips[4]
 
     @property
     def active(self):
