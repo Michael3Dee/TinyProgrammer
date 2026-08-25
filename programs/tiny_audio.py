@@ -16,13 +16,22 @@ All values are in 0..1:
     audio.high    treble band energy
     audio.beat    jumps to 1.0 on a detected beat, then decays to 0
 
+Divided beats (the analyzer tracks the tempo, rejects off-beat onsets
+and keeps a flywheel running, so these stay steady even when a beat is
+buried in the mix):
+
+    audio.beat05  every half beat (twice per beat)
+    audio.beat2   every 2nd beat
+    audio.beat4   every 4th beat
+    audio.beat8   every 8th beat
+
 Inverted counterparts (prefix i): audio.ilevel, ilow, imid, ihigh,
-ibeat. With live audio they are 1 - value (ibeat: 0 on a beat, back to
-1 as it decays) - but without an analyzer AND during silence they are
-1.0 just like the normal values, so any mix of both keeps programs
-looking original when no music plays. Never compute 1 - audio.low
-yourself: that would turn the 1.0 fallback into 0 and break programs
-on the Pi.
+ibeat, ibeat05, ibeat2, ibeat4, ibeat8. With live audio they are
+1 - value (ibeat: 0 on a beat, back to 1 as it decays) - but without
+an analyzer AND during silence they are 1.0 just like the normal
+values, so any mix of both keeps programs looking original when no
+music plays. Never compute 1 - audio.low yourself: that would turn the
+1.0 fallback into 0 and break programs on the Pi.
 
 audio.flip alternates with the beat: +1 on even beats, -1 on odd beats
 (audio.iflip is the opposite phase). Handy as a direction or mirror
@@ -46,7 +55,10 @@ import struct
 import tempfile
 import time
 
-_FMT = "<d7f"  # timestamp, active, level, low, mid, high, beat, flip (roh)
+# timestamp, active, level, low, mid, high, beat, beat05, beat2, beat4,
+# beat8, flip (Rohwerte)
+_FMT = "<d11f"
+_NVALS = 9        # level, low, mid, high, beat, beat05, beat2, beat4, beat8
 _SIZE = struct.calcsize(_FMT)
 _STALE_SECONDS = 0.5
 _CACHE_SECONDS = 0.02             # at most ~50 reads per second
@@ -63,8 +75,8 @@ class _Audio:
         self._path = os.environ.get("TINY_AUDIO_SHM") or os.path.join(
             tempfile.gettempdir(), "tiny_audio.shm")
         self._fh = None
-        self._vals = (1.0, 1.0, 1.0, 1.0, 1.0)
-        self._ivals = (1.0, 1.0, 1.0, 1.0, 1.0)
+        self._vals = (1.0,) * _NVALS
+        self._ivals = (1.0,) * _NVALS
         self._flip = 1.0
         self._iflip = 1.0
         self._active = 0.0
@@ -121,8 +133,8 @@ class _Audio:
             # Stille auf 1.0 - so bleibt jede Mischung im Original-Look.
             blend = max(0.0, min(1.0, rec[1]))
             raw = tuple(0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
-                        for v in rec[2:7])
-            flip = max(-1.0, min(1.0, rec[7]))
+                        for v in rec[2:2 + _NVALS])
+            flip = max(-1.0, min(1.0, rec[2 + _NVALS]))
             self._active = blend
             self._vals = tuple(v * blend + (1.0 - blend) for v in raw)
             self._ivals = tuple((1.0 - v) * blend + (1.0 - blend)
@@ -131,8 +143,8 @@ class _Audio:
             self._iflip = -flip * blend + (1.0 - blend)
         else:
             self._active = 0.0
-            self._vals = (1.0, 1.0, 1.0, 1.0, 1.0)
-            self._ivals = (1.0, 1.0, 1.0, 1.0, 1.0)
+            self._vals = (1.0,) * _NVALS
+            self._ivals = (1.0,) * _NVALS
             self._flip = 1.0
             self._iflip = 1.0
 
@@ -161,6 +173,26 @@ class _Audio:
         self._refresh()
         return self._vals[4]
 
+    @property
+    def beat05(self):
+        self._refresh()
+        return self._vals[5]
+
+    @property
+    def beat2(self):
+        self._refresh()
+        return self._vals[6]
+
+    @property
+    def beat4(self):
+        self._refresh()
+        return self._vals[7]
+
+    @property
+    def beat8(self):
+        self._refresh()
+        return self._vals[8]
+
     # -- invertierte Werte (1 - x bei Live-Audio, 1.0 im Fallback) ----------
 
     @property
@@ -187,6 +219,26 @@ class _Audio:
     def ibeat(self):
         self._refresh()
         return self._ivals[4]
+
+    @property
+    def ibeat05(self):
+        self._refresh()
+        return self._ivals[5]
+
+    @property
+    def ibeat2(self):
+        self._refresh()
+        return self._ivals[6]
+
+    @property
+    def ibeat4(self):
+        self._refresh()
+        return self._ivals[7]
+
+    @property
+    def ibeat8(self):
+        self._refresh()
+        return self._ivals[8]
 
     @property
     def flip(self):
