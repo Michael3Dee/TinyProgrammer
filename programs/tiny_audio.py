@@ -38,6 +38,12 @@ when the next one is due (audio.iramp runs the other way). Great for
 rotations or sweeps locked to the tempo. Without a tempo lock, an
 analyzer or during silence it is constant 1.0.
 
+audio.energy is spectral fullness, not loudness: how much of the
+spectrum is active at once. A loud solo bassline or a filtered
+build-up scores low, a full mix with all instruments scores high
+(audio.ienergy inverted). Multiply with audio.low for a crisp drop
+detector: build-ups usually cut the low end, the drop brings it back.
+
 audio.flip alternates with the beat: +1 on even beats, -1 on odd beats
 (audio.iflip is the opposite phase). Handy as a direction or mirror
 factor, e.g. x = cx + int(dx * audio.flip). The divided variants
@@ -64,9 +70,9 @@ import tempfile
 import time
 
 # timestamp, active, level, low, mid, high, beat, beat05, beat2, beat4,
-# beat8, ramp, flip, flip05, flip2, flip4, flip8 (Rohwerte)
-_FMT = "<d16f"
-_NVALS = 10       # level..beat8 plus ramp (alle 0..1)
+# beat8, ramp, energy, flip, flip05, flip2, flip4, flip8 (Rohwerte)
+_FMT = "<d17f"
+_NVALS = 11       # level..beat8, ramp, energy (alle 0..1)
 _NFLIPS = 5       # flip, flip05, flip2, flip4, flip8 (alle -1..+1)
 _SIZE = struct.calcsize(_FMT)
 _STALE_SECONDS = 0.5
@@ -259,6 +265,16 @@ class _Audio:
     def iramp(self):
         self._refresh()
         return self._ivals[9]
+
+    @property
+    def energy(self):
+        self._refresh()
+        return self._vals[10]
+
+    @property
+    def ienergy(self):
+        self._refresh()
+        return self._ivals[10]
 
     # -- Paritaets-Flips (+1/-1 im Wechsel; 1.0 im Fallback) ----------------
 
