@@ -36,6 +36,7 @@ class Canvas:
         # Identity by default; translate/rotate/push/pop mutate it.
         self._m = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
         self._stack = []
+        self._next_tick = None
         # Flush immediately so animation is smooth
         sys.stdout.reconfigure(line_buffering=True)
         atexit.register(self._flush_at_exit)
@@ -193,3 +194,23 @@ class Canvas:
         """Sleep for seconds."""
         self._flush()
         time.sleep(seconds)
+
+    def tick(self, fps=30):
+        """Hold a steady frame rate (use instead of sleep at frame end).
+
+        Unlike sleep(x), which ADDS the frame's compute time on top,
+        tick only sleeps the remaining time until the next frame target,
+        so `c.show(); c.tick(30)` gives a constant 30 fps regardless of
+        how long the frame took to compute. Falls behind gracefully:
+        after a long stall the schedule re-anchors instead of racing
+        to catch up.
+        """
+        period = 1.0 / float(fps) if fps > 0 else 0.0
+        self._flush()
+        now = time.monotonic()
+        if self._next_tick is None or now - self._next_tick > period * 3:
+            self._next_tick = now
+        self._next_tick += period
+        delay = self._next_tick - now
+        if delay > 0:
+            time.sleep(delay)
